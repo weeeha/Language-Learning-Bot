@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mulberry32, weightedPick, pickDrill } from '../lib.mjs';
+import { chunkMarkdown, contentHash } from '../lib.mjs';
 
 test('mulberry32 is deterministic and in [0,1)', () => {
   assert.equal(mulberry32(1)(), mulberry32(1)());
@@ -28,4 +29,25 @@ test('pickDrill avoids repeating the immediately previous format when possible',
   const got = new Set();
   for (let s = 0; s < 50; s++) got.add(pickDrill({ settings, sessions, rng: mulberry32(s) }).format);
   assert.ok(got.has('behavioral'), 'anti-repeat should surface the alternative at least once');
+});
+
+test('chunkMarkdown splits on headings and keeps heading text', () => {
+  const md = '# A\nalpha body\n\n## B\nbeta body';
+  const chunks = chunkMarkdown(md);
+  assert.equal(chunks.length, 2);
+  assert.equal(chunks[0].heading, 'A');
+  assert.match(chunks[0].text, /alpha/);
+  assert.equal(chunks[1].heading, 'B');
+});
+
+test('chunkMarkdown splits oversized sections on blank lines', () => {
+  const big = Array.from({ length: 10 }, (_, i) => `para ${i} ` + 'x'.repeat(300)).join('\n\n');
+  const chunks = chunkMarkdown('# Big\n' + big, { maxChars: 800 });
+  assert.ok(chunks.length > 1, 'should split a long section');
+  assert.ok(chunks.every(c => c.heading === 'Big'));
+});
+
+test('contentHash is stable and sensitive', () => {
+  assert.equal(contentHash('x'), contentHash('x'));
+  assert.notEqual(contentHash('x'), contentHash('y'));
 });

@@ -30,3 +30,40 @@ export function pickDrill({ settings, sessions, rng }) {
   }
   return { format };
 }
+
+import { createHash } from 'node:crypto';
+
+export function contentHash(str) {
+  return createHash('sha256').update(str).digest('hex').slice(0, 16);
+}
+
+// Split markdown into {heading, text} chunks. New chunk at each ATX heading;
+// oversized sections are further split on blank lines to ~maxChars.
+export function chunkMarkdown(text, { maxChars = 1500 } = {}) {
+  const lines = text.split(/\r?\n/);
+  const chunks = [];
+  let heading = '';
+  let buf = [];
+  const flush = () => {
+    const body = buf.join('\n').trim();
+    if (body) {
+      let cur = '';
+      for (const para of body.split(/\n{2,}/)) {
+        if (cur && (cur + '\n\n' + para).length > maxChars) {
+          chunks.push({ heading, text: cur.trim() });
+          cur = para;
+        } else {
+          cur = cur ? cur + '\n\n' + para : para;
+        }
+      }
+      if (cur.trim()) chunks.push({ heading, text: cur.trim() });
+    }
+    buf = [];
+  };
+  for (const line of lines) {
+    if (/^#{1,6}\s/.test(line)) { flush(); heading = line.replace(/^#{1,6}\s/, '').trim(); }
+    else buf.push(line);
+  }
+  flush();
+  return chunks;
+}
