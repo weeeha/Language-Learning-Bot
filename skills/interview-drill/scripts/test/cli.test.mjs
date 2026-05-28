@@ -38,3 +38,25 @@ test('buildIndex embeds chunks and reuses unchanged files', async () => {
   assert.equal(second.items.length, 2);
   assert.equal(calls, 1, 'unchanged files should not be re-embedded');
 });
+
+import { queryIndex } from '../rag_query.mjs';
+import { mkdtempSync as mkd3, writeFileSync as wf3 } from 'node:fs';
+import { tmpdir as tmp3 } from 'node:os';
+import { join as j3 } from 'node:path';
+
+test('queryIndex returns top-K chunks ranked by similarity, no embeddings leaked', async () => {
+  const dir = mkd3(j3(tmp3(), 'vec-'));
+  const vectors = j3(dir, 'vectors.json');
+  wf3(vectors, JSON.stringify({
+    items: [
+      { id: 'design#0', file: 'd.md', heading: 'Design', text: 'design systems', embedding: [1, 0, 0] },
+      { id: 'cook#0', file: 'c.md', heading: 'Cooking', text: 'cooking pasta', embedding: [0, 1, 0] }
+    ],
+    source_hashes: {}
+  }));
+  const fakeEmbed = async () => [[0.9, 0.1, 0]];
+  const hits = await queryIndex({ vectorsPath: vectors, query: 'design work', k: 1, embedFn: fakeEmbed });
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0].id, 'design#0');
+  assert.ok(!('embedding' in hits[0]));
+});
