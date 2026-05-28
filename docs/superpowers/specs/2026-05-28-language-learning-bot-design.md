@@ -1,227 +1,185 @@
 # English Interview Coach — Design Spec
 
 **Date:** 2026-05-28
-**Status:** Approved (design phase complete)
+**Status:** Approved (design phase complete; revised after OpenClaw research)
 **Owner:** Nick Vyhouski
+
+> **Key decision (revised 2026-05-28):** This is **not** a new standalone agent. It **extends the existing `speaker` agent ("Coach 🗣️")** in `~/.openclaw/workspace-speaker/`, which already runs daily vocabulary drops (with spaced repetition) and reactive pitch coaching. We add a new **`interview-drill` skill** (+ RAG personalization + a later Mini App), reusing Coach's bot (`@Nxspeakingcoachbot`, botId `8781119158`), persona, `vocabulary-trainer` + `pitch-coach` skills, cron, and TTS.
 
 ## 1. Purpose
 
-A personal English-language interview-prep tool for a senior product designer. It is **not** a Duolingo-style product for an audience — it is a single-user coach tailored to Nick, focused on the three things he needs most:
+A personal English interview-prep capability for a senior product designer, added to his existing OpenClaw "Coach" agent. Focus on the three things he needs most:
 
 1. **Speaking practice** — the weakest area, the top priority
-2. **Interview-specific vocabulary** — the language used in design interviews
-3. **Pitch + skill articulation** — delivering a personal narrative and calling out specific skills fluently
+2. **Interview-specific vocabulary** — already partly served by Coach's `vocabulary-trainer`; we feed it interview gaps
+3. **Pitch + skill articulation** — already partly served by Coach's `pitch-coach`; we add personalized, format-varied question drills
 
-Delivered as a **Telegram bot** (`@Nxspeakingcoachbot`) for the daily voice-practice loop, plus a **lightweight Telegram Mini App** for the things tap beats voice (flashcards, pitch editing, history, settings). Built as a new agent inside the user's existing **OpenClaw** framework — not as standalone cloud infrastructure.
+Delivered through Coach's existing **Telegram bot** (`@Nxspeakingcoachbot`) for the daily voice loop, plus a **lightweight Telegram Mini App** (later phase) for flashcards, pitch editing, history, and settings.
 
 ## 2. Goals & Non-Goals
 
 ### Goals
-- Sustainable **daily speaking reps** over a 6–12 month horizon (open-ended skill-building, not a cram-before-one-interview sprint)
+- Sustainable **daily speaking reps** over a 6–12 month horizon (open-ended, not a one-interview cram)
 - Practice across **all interview formats**: portfolio walkthrough, behavioral, design critique, whiteboard, hiring-manager screen
-- **Personalized from day one** — questions reference Nick's actual portfolio, pitch, and project case studies
+- **Personalized from day one** via RAG over Nick's real bio/portfolio (`github.com/weeeha/nicks-bio`)
 - **Medium-depth feedback** per answer: transcript, 2–3 rephrases, model answer (text + audio), 1–5 score
-- Run on **hardware Nick already owns** (Mac Studio), reusing OpenClaw's channel/auth/cron/TTS — near-zero new cloud spend
+- **Reuse, don't duplicate** — build on Coach's working vocab/pitch habit rather than a parallel agent
+- Run on hardware Nick already owns (Mac Studio), near-zero new cloud spend
 
 ### Non-Goals
-- Multi-user support, signup flows, onboarding funnels, growth loops, monetization
-- A rigid curriculum / course tree (Nick already knows what design interviews are)
+- A new/separate agent (explicitly rejected — extend Coach)
+- Multi-user, signup, onboarding funnels, growth loops, monetization
+- A rigid curriculum / course tree
 - Aggressive gamification (no hearts, leagues, shame-based streaks)
-- Native iOS app (too much effort for a personal tool)
-- Pronunciation scoring in v1 (deferred to v2)
+- Native iOS app
+- Pronunciation scoring in v1 (Coach already has a `pronunciation-coach` skill; deeper scoring deferred to v2)
 
 ## 3. Users & Success Criteria
 
-**User:** Nick Vyhouski — senior startup product designer, 14+ years experience, advanced English (non-native), preparing for design interviews. Comfortable speaking but wants to sharpen fluency, vocabulary, and structured delivery.
+**User:** Nick Vyhouski — senior startup product designer, 14+ years, advanced (non-native) English, preparing for design interviews. Already uses Coach daily.
 
 **Success looks like:**
 - Nick answers ≥1 interview question by voice most weekdays
 - Average answer score trends up over weeks
-- Vocabulary queue grows from real gaps and gets reviewed
-- Pitch variants get measurably tighter (score history per variant improves)
-- The tool feels like a calm daily habit, not a chore
+- Vocabulary queue grows from real interview gaps and gets reviewed (via existing `vocabulary-trainer`)
+- Pitch variants get measurably tighter (pitch-coach score history improves)
+- Feels like a calm extension of an existing daily habit, not a new chore
 
-## 4. Architecture (OpenClaw-native)
+## 4. Architecture (extend Coach inside OpenClaw)
 
-The system is a new agent inside OpenClaw (the user's personal-AI framework running on the Mac Studio). OpenClaw provides the Telegram channel, multi-agent routing, cron, TTS (ElevenLabs), skills system, and an OpenAI model profile with failover.
+### How OpenClaw actually works (verified findings — research 2026-05-28)
+- **Skills are `SKILL.md` instruction files, not code modules.** The agent (LLM) reads the markdown and orchestrates real tools (`exec`, `tts`, `message`, `read`, `write`, `cron`). Deterministic work lives in bundled `scripts/` that the agent runs via `exec`. Skills live in `<workspace>/skills/<name>/SKILL.md`.
+- **Inbound voice is auto-transcribed** by OpenClaw's "media understanding" pipeline *before* the agent turn — the transcript is already in the prompt. **Our skill needs no STT code.** (Currently configured to cloud `gpt-4o-mini-transcribe`; a local Whisper CLI path exists if we want fully-local later.)
+- **Agent + routing config** lives in `~/.openclaw/openclaw.json`: `agents.list[]` (Coach = `id:"speaker"`), `channels.telegram.accounts.<id>` (bot token), `bindings[]` (account→agent). Coach is already wired to `@Nxspeakingcoachbot`.
+- **Cron** is a gateway scheduler: jobs in `~/.openclaw/cron/jobs.json` with `schedule.expr` (cron) + `tz`, `agentId`, `sessionTarget:"isolated"`, and a `payload.message` that instructs the agent. **No catch-up if the Mac was asleep at fire time** — a missed fire is skipped, not replayed.
+- **TTS** active provider is **OpenAI** (`gpt-4o-mini-tts`, voice "nova"); the `tts` tool auto-delivers as a Telegram **voice note**. ElevenLabs key exists but isn't the selected provider (switchable later).
+- **Inline keyboards** work but must be enabled (`channels.telegram.capabilities.inlineButtons`); button presses return to the agent as text `callback_data: <value>`. **Voice notes can't carry buttons in the same message** — send audio, then a separate text+buttons message.
+- **`exec`** runs freely for non-main agents under the current permissive policy; scripts run on the host.
 
-### Components
+### Components (what we build / change)
 
-**1. Agent: `english-coach`**
-- Workspace: `workspace-english-coach/`
-- Bound to its own BotFather bot `@Nxspeakingcoachbot` via OpenClaw multi-agent routing
-- Tools enabled: `cron`, `read`, `write`, `exec`, `tts`, `memory_*`, plus the Telegram channel send/receive
+**1. New skill: `workspace-speaker/skills/interview-drill/SKILL.md`**
+Instructions teaching Coach how to: pick today's format+focus, generate a personalized question, send it, receive the voice answer (transcript auto-provided), score it, format medium feedback, send model-answer TTS, log the session, and enqueue weak vocab into the existing `vocabulary-trainer` flow.
 
-**2. Skill bundle: `interview-drill`** (packaged via OpenClaw's skills system)
-- `dailyQuestion()` — sample format + focus, RAG against sources, generate question, DM via bot
-- `scoreAnswer()` — STT → GPT scoring → format feedback → TTS model answer
-- `extractVocab()` — pull weak words/phrases from rephrases into the SRS queue
-- `drillPitch()` — load a pitch variant and run targeted Q&A
-- `reindexSources()` — chunk + embed source files into the vector store
+**2. Bundled scripts: `workspace-speaker/skills/interview-drill/scripts/`** (Node ESM, run via `exec`)
+- `pick_drill.mjs` — weighted format/focus sampling + anti-repeat (reads session log)
+- `rag_index.mjs` — chunk `sources/` markdown, embed via OpenAI `text-embedding-3-small`, cache to `vectors.json` (re-embed only on content-hash change)
+- `rag_query.mjs` — embed a query, brute-force cosine over cached vectors, return top-K chunks (no vector DB — corpus is ~10 files)
+- `score_answer.mjs` — call OpenAI API directly with `response_format: json_schema` (strict) → `{score, rephrases[], model_answer, weak_vocab[]}`. **Reads the OpenAI key from env, never from logged config.**
 
-**3. Voice pipeline**
-- **STT:** local `faster-whisper-base` on the Mac (free; `parakeet-tdt-0.6b-v3` as a higher-quality option)
-- **Reasoning/scoring/question-gen:** OpenAI `gpt-4o` via OpenClaw's OpenAI profile, with model failover (local Gemma 31B as degraded fallback for question generation)
-- **TTS:** ElevenLabs (existing key) for model-answer audio
+**3. State: `workspace-speaker/interview/`**
+- `sources/` — git clone of `weeeha/nicks-bio` (single source of truth); `git pull` on a schedule or manual
+- `vectors.json` — cached embeddings
+- `sessions.jsonl` — append-only structured session log (drives progress + the future Mini App)
+- `settings.json` — format weights, nudge time, per-day target, tz
+- Weak vocab is appended into Coach's existing `vocabulary_log.md` / word-list flow (reuse, don't fork)
 
-**4. Mini App**
-- React + Vite + `@telegram-apps/sdk`, theme-aware via `themeParams`
-- Served by OpenClaw's web surface / the agent, exposed over HTTPS via **Cloudflare Tunnel** or **Tailscale Funnel** (Telegram requires HTTPS)
-- Same origin as the agent's API → no CORS
-- Auth via Telegram `initData` + server-side HMAC-SHA256 verification
+**4. Cron job** — `interview-drill`, `agentId:"speaker"`, `schedule.expr:"30 8 * * 1-5"`, `tz`, `sessionTarget:"isolated"`, `payload.message` instructing Coach to run the drill, `toolsAllow:["exec","tts","message"]`.
 
-**5. Storage (all local to the workspace)**
-- `sources/` — git clone of `github.com/weeeha/nicks-bio` (single source of truth), optionally augmented with scraped `vyhouski.com` project content
-- `state.db` — SQLite: sessions, vocab queue (Leitner boxes), scores, pitch-variant metadata, settings
-- `vectors.db` — embeddings (SQLite + `sqlite-vss`; pgvector acceptable if local Postgres preferred)
-- `audio/` — voice-in + TTS-out files (30-day TTL unless pinned)
+**5. Config change** — enable `channels.telegram.capabilities.inlineButtons` (scoped to the Coach account).
 
-### Why OpenClaw-native (vs. Vercel/Neon)
-- Zero new cloud spend; data stays on Nick's Mac
-- Reuses channel, auth, cron, TTS, model failover — much less to build
-- Local Whisper = free STT vs. ~$0.006/min API
-- Failover and daemon lifecycle already handled by OpenClaw
+**6. Mini App (later phase)** — React + Vite + `@telegram-apps/sdk`. Served by a **small standalone local server** (static bundle + JSON API together), exposed via **Tailscale Funnel** or `cloudflared`, kept **off** the OpenClaw gateway (coupling it would force a password on the whole agent fleet). Auth via Telegram `initData` HMAC-SHA256 using Coach's bot token. Reads/writes the same `workspace-speaker/interview/` state.
 
-### Assumptions to verify during planning
-The architecture above infers OpenClaw capabilities from its README and infrastructure notes. Before/while writing the implementation plan, verify against OpenClaw's actual docs and source:
-- **Skill API** — how a workspace/managed skill is authored (language, entry points, how it receives messages and calls tools); whether a skill can register cron callbacks and inline-keyboard handlers
-- **Multi-agent routing** — how a specific Telegram bot account (`@Nxspeakingcoachbot`) is bound to a specific agent + workspace
-- **Web surface hosting** — whether OpenClaw can serve the Mini App's static bundle + API on a stable HTTPS origin (web surface vs. agent-served vs. external static host + tunnel), and how `initData` verification fits
-- **`exec` tool** — running `faster-whisper` as a subprocess from a skill; sandbox implications for a non-`main` agent
-- **TTS tool** — invoking ElevenLabs for arbitrary text and getting back an audio file to attach to a Telegram voice message
-- **Cron tool** — timezone handling, skip-weekends, and behavior when the daemon was asleep at fire time
-- **Telegram media** — receiving voice messages and sending voice/audio replies through OpenClaw's Telegram channel abstraction
-
-These are planning-phase research targets, not open design questions — the design holds regardless of the answers; only the *implementation mechanics* depend on them.
+### Why extend Coach (vs. new agent)
+Coach already nails ~70% of the design — daily vocab with SRS, pitch evaluation for interviews, pronunciation/grammar/writing, a working cron habit, and a bot. A separate agent would duplicate all of that and split daily practice across two bots. Extending reuses the working habit and adds only the genuinely new parts.
 
 ## 5. Personalization & RAG
 
-### Source material (in `sources/`, from `nicks-bio`)
-The bio repo is already structured usefully: `nick-vyhouski-brief.md`, `case-study-answers.md`, `about-page.md`, `questionnaire.md`, `vibefolio.md`, etc. These map to:
-- **Portfolio overview** — who Nick is professionally, design philosophy, goals
-- **Pitch script(s)** — the 60–90s "tell me about yourself," with variants per audience (design-system role, IC vs. lead, etc.)
-- **Project case studies** — context, role, problem, process, decisions, outcomes, lessons; tagged with skills (research, design-system, prototyping, leadership) so questions can target gaps
+### What's reused vs. new
+- **Reused:** `vocabulary-trainer` (daily drops, 1→3→7→14-day SRS, topic word lists, `vocabulary_log.md`, `run_vocab_tts.py`); `pitch-coach` (5-dimension scoring, voice analysis, `pitch_history.md`).
+- **New:** RAG over Nick's actual bio/portfolio so questions reference *his* projects (NextHealth, FraudFighter, ProPortals, Flow Builders), not generic prompts.
 
-### Ingestion flow
-1. Agent clones `nicks-bio` into `sources/` at boot; `git pull` on schedule (or manual "Sync from GitHub")
-2. `reindexSources()` chunks at heading boundaries → embeds via `text-embedding-3-small` → stores in `vectors.db`
-3. Sidecar metadata: chunk → file → section heading → skill tags
+### Source material (`interview/sources/`, from `nicks-bio`)
+The bio repo is already structured usefully: `nick-vyhouski-brief.md`, `case-study-answers.md`, `about-page.md`, `questionnaire.md`, `vibefolio.md`, etc. These supply portfolio overview, pitch material, and project case studies (tagged by skill so questions can target gaps).
 
-### Retrieval at question time
-1. Sample interview format (weighted: portfolio 40% / behavioral 25% / critique 15% / whiteboard 10% / hiring-manager 10% — configurable)
-2. Sample focus (a project, a skill, or a pitch variant; weighted by recency to emphasize least-practiced)
-3. Retrieve top-K chunks from relevant sources
-4. Build prompt: system rules + retrieved context + recent session history (anti-repeat) + generate question
-
-### Not in RAG (lives in `state.db`)
-Past sessions, vocab queue, settings, pitch-variant score history.
+### Ingestion & retrieval
+1. Clone `nicks-bio` into `sources/`; `git pull` to refresh
+2. `rag_index.mjs` chunks at heading boundaries → embeds (`text-embedding-3-small`) → caches `vectors.json` (re-embed on hash change only)
+3. At question time: `pick_drill.mjs` chooses format (portfolio 40% / behavioral 25% / critique 15% / whiteboard 10% / hiring-manager 10%, configurable) + focus (project/skill/pitch, recency-weighted), then `rag_query.mjs` returns top-K chunks; Coach generates the question from that context + recent-history anti-repeat.
 
 ## 6. Daily Drill Loop
 
-### Morning trigger (default 8:30 local, skip weekends, configurable)
-1. OpenClaw cron → `interview-drill.dailyQuestion()`
-2. Sample format + focus (per §5 weighting)
-3. Retrieve RAG chunks + recent history (anti-repeat)
-4. Generate question via GPT-4o
-5. Bot DMs via `@Nxspeakingcoachbot`: voice (TTS) + text + inline keyboard:
-   - `🎤 Answer by voice` · `📝 Answer by text` · `⏭️ Skip` · `🔄 Different`
+### Morning trigger (default 8:30 local, weekdays; configurable)
+1. OpenClaw cron fires an isolated `agentTurn` for `speaker` with a prompt: "Run today's interview drill per `skills/interview-drill/SKILL.md`."
+2. Coach runs `pick_drill.mjs` → format + focus; `rag_query.mjs` → context chunks
+3. Coach generates one question; sends it via `message` + a `tts` voice note
+4. Separate text message with inline buttons: `🎤 Answer by voice` · `📝 Answer by text` · `⏭️ Skip` · `🔄 Different` (voice notes can't carry buttons)
 
-### On voice reply
-1. Download voice file from Telegram
-2. Local `faster-whisper` STT → transcript
-3. GPT-4o scoring → structured JSON: `score` (1–5), `rephrases` (2–3), `model_answer` (text), `weak_vocab` (list)
-4. Bot replies: your transcript · rephrases · model answer (text + TTS audio) · score · inline keyboard:
-   - `🔁 Try again` · `📌 Save vocab` · `🎯 Go deeper` · `✅ Done`
-5. Background: `weak_vocab` enqueued in SRS; session logged in `state.db`
+### On voice reply (next turn)
+1. **Transcript is already in the prompt** (media-understanding) — no STT step
+2. Coach runs `score_answer.mjs` with question + transcript + retrieved context → structured JSON `{score 1–5, rephrases[2–3], model_answer, weak_vocab[]}`
+3. Coach replies: your transcript · rephrases · model answer (text) + `tts` voice note · score
+4. Separate buttons message: `🔁 Try again` · `📌 Save vocab` · `🎯 Go deeper` · `✅ Done`
+5. Append session to `sessions.jsonl`; append `weak_vocab` into Coach's `vocabulary_log.md`/word-list flow
 
 ### On-demand
-- `🎯 Go deeper` → full rubric (fluency, vocab range, structure, content depth) for that answer
+- `🎯 Go deeper` → full rubric (fluency, vocab range, structure, content depth) for that answer (re-invokes scorer in a deeper mode)
 - `🔁 Try again` → same question, new attempt; both scores recorded
-- `📌 Save vocab` → manual addition beyond auto-extracted
-- `/more` → request another question the same day (per-day target adjustable in settings)
+- `📌 Save vocab` → manual add beyond auto-extracted
+- `/more` → another question same day (per-day target adjustable)
+
+### Cadence coexistence with existing vocab drop
+Coach already drops daily vocab. The interview question is a separate, complementary nudge. Keep them as two light touches (or let Nick tune timing in settings) — not merged into one wall of text.
 
 ### Weekly (Sundays)
-Summary DM: questions answered, avg score, vocab queue size, weak areas (low-scoring formats/skills), suggested focus. Link to Mini App.
+Summary DM: questions answered, avg score, vocab queue size, weak formats/skills, suggested focus. Link to Mini App (once it exists).
 
-### Engagement (Babbel-style, not Duolingo-style)
-- Daily completion = answer ≥1 question fully
-- Streak counter visible but never weaponized (no shame, no paywalled freeze)
-- Missed days delay next prompt by half a day; after 5+ missed in a row, bot asks "everything OK? want to pause for a week?" (opt-in re-engagement)
+### Engagement (Babbel-style)
+Daily completion = answer ≥1 question fully. Streak counter visible but never weaponized. After 5+ missed days, Coach asks "everything OK? want to pause?" (opt-in).
 
-## 7. Mini App (4 screens)
+## 7. Mini App (4 screens) — later phase
 
-Bottom tab bar, 4 tabs.
+Stack: React + Vite + `@telegram-apps/sdk`, theme-aware via `themeParams`. **Hosting:** standalone local server + Tailscale Funnel / `cloudflared`, off the gateway. **Auth:** `initData` HMAC-SHA256 (verify server-side; bot token from config/env, never shipped to client). Frontend sends `initDataRaw` in an `Authorization: tma <raw>` header.
 
 ### Tab 1 — Sessions (default landing)
-- Newest-first list; each row: date, truncated question, score, format pill, focus pill
-- Filter chips: All / Portfolio / Behavioral / Critique / Whiteboard / Hiring Manager
-- Tap → detail: question (text + play voice), your answer (transcript + play voice), rephrases, model answer (text + play TTS), score, weak vocab; actions `🔁 Re-do` · `📌 Pin` · `🎯 Go deeper`
-- Search by question text or project
+Newest-first list (date, truncated question, score, format pill, focus pill); filter chips by format; tap → detail (question text+voice, your transcript+voice, rephrases, model answer text+TTS, score, weak vocab; actions `🔁 Re-do` · `📌 Pin` · `🎯 Go deeper`); search. Source: `sessions.jsonl`.
 
 ### Tab 2 — Pitch Studio
-- List of pitch variants
-- Tap → full-screen markdown editor (save → auto-reindex)
-- `Drill this pitch` → bot starts focused Q&A on this variant
-- Score-history sparkline per variant
-- `Generate a variant` → bot helps create a variant for a different role/audience
-- `+ New variant`
+List of pitch variants → full-screen markdown editor (save → reindex); `Drill this pitch` (uses existing pitch-coach); score-history sparkline (from `pitch_history.md`); `Generate a variant`; `+ New variant`.
 
 ### Tab 3 — Vocab
-- SRS queue front-and-center: "N cards to review today"
-- Card front: word/phrase in original sentence context; back: meaning, alternative phrasings, examples, TTS audio
-- Swipe right = knew it (advance Leitner box) · swipe left = missed (reset to box 1)
-- "All vocab" list: filter by source (auto vs. manual), search; `+ Add` manual entry
-- (Pronunciation "🎤 Say it" deferred to v2)
+SRS queue ("N cards to review today") from the existing `vocabulary-trainer` data; card front = term in original context, back = meaning/alt phrasings/examples/TTS; swipe right=knew/left=missed (drives existing 1→3→7→14 SRS); "All vocab" list + search; `+ Add`. (Pronunciation "🎤 Say it" deferred to v2.)
 
 ### Tab 4 — Workspace
-- File browser mirroring `sources/`
-- Tap file → markdown editor with preview toggle; **save = local only**, with a manual `Push to GitHub` button per file (bot does not silently own the bio repo)
-- `Sync from GitHub` button (manual `git pull`)
-- **Skills coverage** viz — which skills the projects cover, which are underrepresented
-- **Settings:** daily nudge time, skip-weekends toggle, format-weight sliders, per-day target (1–5), TTS voice selection, full JSON data export
+File browser over `interview/sources/`; markdown editor with preview; **save = local only**, manual `Push to GitHub` per file; `Sync from GitHub` button; **Skills coverage** viz; **Settings** (nudge time, skip-weekends, format-weight sliders, per-day target 1–5, TTS voice, JSON export).
 
-## 8. Data Model (`state.db`)
+## 8. Data Model
 
-- **sessions** — id, ts, format, focus_ref, question_text, question_audio_path, answer_mode (voice/text), answer_transcript, answer_audio_path, score, rephrases (json), model_answer_text, model_answer_audio_path, weak_vocab (json), pinned (bool), deep_rubric (json, nullable)
-- **vocab** — id, term, context_sentence, meaning, alt_phrasings (json), examples (json), source (auto/manual), leitner_box (1–6), next_review_ts, created_ts
-- **pitch_variants** — id, slug, title, audience, file_path, last_drilled_ts, score_history (json)
-- **settings** — singleton row: nudge_time, skip_weekends, format_weights (json), per_day_target, tts_voice_id, timezone
-- **sync_state** — last_git_sha, last_reindex_ts, last_good_index (bool)
+**`sessions.jsonl`** (one JSON object per line): `id, ts, format, focus_ref, question_text, question_audio_path, answer_mode, answer_transcript, answer_audio_path, score, rephrases[], model_answer_text, model_answer_audio_path, weak_vocab[], pinned, deep_rubric?`
 
-`vectors.db` — chunk_id, file, heading, skill_tags (json), embedding (vector), text.
+**`settings.json`**: `nudge_time, skip_weekends, format_weights{}, per_day_target, tts_voice, timezone`
+
+**`vectors.json`**: array of `{chunk_id, file, heading, skill_tags[], text, embedding[1536]}` + a top-level `source_hashes{}` for incremental re-embed.
+
+**Reused (existing Coach files):** `vocabulary_log.md`, `word_lists/*.md`, `pitch_history.md`.
 
 ## 9. Error Handling & Edge Cases
 
-**Voice input:** >5 min → truncate + warn; silent/unintelligible (Whisper confidence < threshold) → "couldn't hear that, try again?"; text sent instead → skip STT; sticker/image/file → "I need voice or text for this question."
-
-**GPT scoring:** OpenAI down → OpenClaw model failover (local Gemma for question gen; lighter scoring prompt); JSON parse fail → one retry with stricter schema, else ungraded feedback (never block user); token overflow → truncate RAG context first.
-
-**Availability:** Mac asleep at cron time → missed nudge queues, fires on wake with "missed yesterday" note; tunnel down → Mini App unreachable but bot keeps working; bot webhook fail → OpenClaw retries/queues.
-
-**Source repo:** `nicks-bio` broken/empty → use last good index, DM warning; `vectors.db` corrupted → rebuild from `sources/` on next boot.
-
-**Data hygiene:** audio TTL 30 days unless pinned; `state.db` nightly backup (last 7 days); full JSON export from Settings.
+**Voice input:** transcript empty/garbled (media-understanding returns little) → "couldn't hear that, try again?"; user sends text → no transcript step needed; sticker/image → "I need voice or text."
+**Scoring:** OpenAI error → retry once, then ungraded feedback (never block); JSON-schema parse fail → strict-mode retry, else ungraded; long answer → truncate RAG context first.
+**Availability:** Mac asleep at cron time → drill **skipped** (no replay) — acceptable for a personal habit; Coach can note "missed yesterday" opportunistically.
+**Source repo:** `nicks-bio` clone/pull fails → use last good `vectors.json`, warn; `vectors.json` missing/corrupt → `rag_index.mjs` rebuilds.
+**Secrets:** scripts read keys from env only; never `cat`/log `openclaw.json`. (Root-caused from a research incident — five creds were rotated.)
+**Data hygiene:** audio TTL 30 days unless pinned; `sessions.jsonl` is the durable log; JSON export from Settings.
 
 ## 10. Testing
 
-Personal tool → minimal but real:
-- **Unit tests** — scoring prompt → valid JSON schema; Leitner SRS box transitions; weighted format/focus sampling distribution
-- **Smoke test** — scripted end-to-end run (canned question + canned voice file) to catch pipe breakage after refactors
-- **Manual QA** — daily real-world use surfaces bugs immediately
-
-No product-grade suite. Run smoke + units before each deploy.
+- **Unit tests** (Node test runner) for the scripts: `rag_query` cosine ranking on fixture vectors; `pick_drill` weighting distribution + anti-repeat; `score_answer` JSON-schema validation + prompt assembly (OpenAI call mocked); `rag_index` chunking + hash-based cache skip.
+- **Smoke test:** scripted end-to-end (canned question + canned transcript fixture) exercising `pick → query → score → format` without Telegram.
+- **Manual QA:** daily real use surfaces bugs.
+- Run unit + smoke before enabling the cron job.
 
 ## 11. Phased Rollout
 
-**Phase 1 — Daily drill loop, bot only (~2 weekends)**
-Agent + bot routing; `dailyQuestion()` + `scoreAnswer()`; sources cloned + indexed once (manual reindex); cron 8:30 skip-weekends; voice → Whisper → GPT-4o → feedback + TTS; `state.db` collecting sessions + vocab (not yet reviewable); settings hardcoded. **Ships a working daily habit with no Mini App.**
+**Phase 1 — `interview-drill` skill in Coach, bot-only (~2 weekends)**
+Skill dir + scripts (`pick_drill`, `rag_index`, `rag_query`, `score_answer`) with unit tests; clone + index `nicks-bio`; `SKILL.md`; cron job (8:30 weekdays, isolated); enable inline buttons; smoke test. Voice in via media-understanding, scoring via OpenAI script, feedback + TTS out, sessions logged, weak vocab fed to existing vocab flow. **Ships a working daily interview drill on the existing bot.**
 
 **Phase 2 — Mini App: Sessions + Workspace (~2–3 weekends)**
-React/Vite scaffold + SDK; tunnel HTTPS; `initData` HMAC auth; Tab 1 + Tab 4; settings UI; "Sync from GitHub" replaces clone-on-boot. **Review history, edit sources, tune settings from phone.**
+Standalone server (static + API) + tunnel; `initData` HMAC auth; Tab 1 + Tab 4; settings UI; GitHub sync button. **Review history, edit sources, tune settings from phone.**
 
 **Phase 3 — Pitch Studio + Vocab (~2–3 weekends)**
-Tab 2 (pitch editor, drill mode, score sparkline); Tab 3 (SRS UI, swipe cards, all-vocab browser); vocab clustering/dedupe; skills-coverage viz. **Full system.**
+Tab 2 (pitch editor + drill + sparkline over `pitch_history.md`); Tab 3 (SRS UI over `vocabulary-trainer` data); skills-coverage viz. **Full system.**
 
-## 12. Future (v2, after ~1 month of daily use)
+## 12. Future (v2)
 
-Pronunciation practice on vocab cards · weekly summary refinements · skills-gap-driven question weighting · auto-push to GitHub from Workspace · mock-interview mode (10–15 min sustained role-play) · per-session JD/role targeting ("today I'm interviewing at Stripe for the design-system role").
+Deeper pronunciation scoring · weekly-summary refinements · skills-gap-driven question weighting · auto-push to GitHub · mock-interview mode (10–15 min sustained role-play) · per-session JD/role targeting · optional fully-local STT (Whisper CLI) and ElevenLabs TTS switch.
