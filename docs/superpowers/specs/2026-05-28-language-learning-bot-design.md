@@ -148,7 +148,7 @@ File browser over `interview/sources/`; markdown editor with preview; **save = l
 
 ## 8. Data Model
 
-**`sessions.jsonl`** (one JSON object per line): `id, ts, format, focus_ref, question_text, question_audio_path, answer_mode, answer_transcript, answer_audio_path, score, rephrases[], model_answer_text, model_answer_audio_path, weak_vocab[], pinned, deep_rubric?`
+**`sessions.jsonl`** (one JSON object per line): `id, ts, format, focus_ref, question_text, question_audio_path, answer_mode, answer_transcript, answer_audio_path, score, rephrases[], model_answer, model_answer_audio_path, weak_vocab[], pinned, deep_rubric?` (Phase 1 writes a subset: `id, ts, format, question_text, answer_transcript, answer_mode, score, rephrases, model_answer, weak_vocab`; audio paths/pinned/focus_ref arrive with the Mini App phases)
 
 **`settings.json`**: `nudge_time, skip_weekends, format_weights{}, per_day_target, tts_voice, timezone`
 
