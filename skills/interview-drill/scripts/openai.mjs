@@ -22,5 +22,7 @@ export async function chatJson(messages, schema, model = process.env.INTERVIEW_S
     messages,
     response_format: { type: 'json_schema', json_schema: schema }
   });
-  return JSON.parse(res.choices[0].message.content);
+  const raw = res.choices[0].message.content;
+  if (!raw) throw new Error('OpenAI returned no content (possible refusal)');
+  return JSON.parse(raw);
 }

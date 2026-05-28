@@ -93,6 +93,7 @@ test('validateScore: accepts valid, rejects invalid', () => {
   assert.ok(validateScore(bad).length >= 3);
 });
 
+// Intentional: save/delete/restore of OPENAI_API_KEY is safe here because these tests run in a single process with no concurrency touching that var.
 test('openai wrapper throws a clear error when OPENAI_API_KEY is missing', () => {
   const saved = process.env.OPENAI_API_KEY;
   delete process.env.OPENAI_API_KEY;
@@ -101,4 +102,8 @@ test('openai wrapper throws a clear error when OPENAI_API_KEY is missing', () =>
   } finally {
     if (saved !== undefined) process.env.OPENAI_API_KEY = saved;
   }
+});
+
+test('weightedPick throws when no positive weights', () => {
+  assert.throws(() => weightedPick({ a: 0, b: 0 }, mulberry32(1)), /no positive-weight/);
 });

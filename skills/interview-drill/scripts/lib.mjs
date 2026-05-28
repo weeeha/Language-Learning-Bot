@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 // Seeded RNG (mulberry32) — deterministic for tests.
 export function mulberry32(seed) {
   let a = seed >>> 0;
@@ -12,6 +14,7 @@ export function mulberry32(seed) {
 // Weighted random key selection. weights: { key: number }
 export function weightedPick(weights, rng) {
   const entries = Object.entries(weights).filter(([, w]) => w > 0);
+  if (!entries.length) throw new Error('weightedPick: no positive-weight entries');
   const total = entries.reduce((s, [, w]) => s + w, 0);
   let r = rng() * total;
   for (const [k, w] of entries) if ((r -= w) < 0) return k;
@@ -30,8 +33,6 @@ export function pickDrill({ settings, sessions, rng }) {
   }
   return { format };
 }
-
-import { createHash } from 'node:crypto';
 
 export function contentHash(str) {
   return createHash('sha256').update(str).digest('hex').slice(0, 16);
@@ -68,6 +69,7 @@ export function chunkMarkdown(text, { maxChars = 1500 } = {}) {
   return chunks;
 }
 
+// Both vectors must be the same dimension (OpenAI embeddings always are).
 export function cosine(a, b) {
   let dot = 0, na = 0, nb = 0;
   for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
@@ -82,6 +84,8 @@ export function topK(queryVec, vectors, k) {
     .slice(0, k);
 }
 
+// Note: numeric min/max here are documentation; OpenAI json_schema enforces
+// structure/types, not value ranges — validateScore() enforces score 1..5 at runtime.
 export const SCORE_SCHEMA = {
   name: 'interview_answer_score',
   strict: true,
