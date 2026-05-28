@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, existsSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { chunkMarkdown, contentHash } from './lib.mjs';
 import { embed } from './openai.mjs';
 
@@ -27,10 +28,11 @@ export async function buildIndex({ sourcesDir, prev = { items: [], source_hashes
   return { items, source_hashes };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   const arg = (n, d) => { const i = process.argv.indexOf(n); return i >= 0 ? process.argv[i + 1] : d; };
   const sourcesDir = arg('--sources');
   const out = arg('--out');
+  if (!sourcesDir || !out) { console.error('Usage: rag_index.mjs --sources <dir> --out <file>'); process.exit(1); }
   const prev = existsSync(out) ? JSON.parse(readFileSync(out, 'utf8')) : undefined;
   const index = await buildIndex({ sourcesDir, prev, embedFn: embed });
   writeFileSync(out, JSON.stringify(index));

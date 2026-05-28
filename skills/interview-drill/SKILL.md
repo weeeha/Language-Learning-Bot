@@ -21,8 +21,8 @@ Run all `exec` commands with `workdir` = this workspace root (`/Users/nickv/.ope
    `exec`: `node skills/interview-drill/scripts/pick_drill.mjs --settings interview/settings.json --sessions interview/sessions.jsonl`
    → `{"format":"<one of: portfolio|behavioral|critique|whiteboard|hiring_manager>"}`
 
-2. Build a short retrieval query for that format (e.g. portfolio → "Nick's strongest project, his role and impact"; behavioral → "a time Nick led through conflict or ambiguity"; critique → "a design decision Nick can defend"). Then:
-   `exec`: `node skills/interview-drill/scripts/rag_query.mjs --vectors interview/vectors.json --query "<query>" --k 6`
+2. Build a short retrieval query for that format (e.g. portfolio → "Nick's strongest project, his role and impact"; behavioral → "a time Nick led through conflict or ambiguity"; critique → "a design decision Nick can defend"). Then use the `write` tool to save the query to `interview/.rq.txt`, then:
+   `exec`: `node skills/interview-drill/scripts/rag_query.mjs --vectors interview/vectors.json --query-file interview/.rq.txt --k 6`
    → JSON array of `{id,file,heading,text,score}`.
 
 3. Write ONE focused interview question in that format, grounded in the retrieved context (reference his real projects — NextHealth, FraudFighter, ProPortals, Flow Builders — when relevant). 1–3 sentences, like a real interviewer. Keep the exact question text; you need it for scoring.
@@ -41,8 +41,8 @@ Voice answers arrive ALREADY TRANSCRIBED in the incoming message (OpenClaw trans
 
 To avoid shell-quoting problems with arbitrary speech text, write inputs to files with the `write` tool, then pass file paths to the scorer.
 
-1. Retrieve context for the question (reuse the Section A query or refine it):
-   `exec`: `node skills/interview-drill/scripts/rag_query.mjs --vectors interview/vectors.json --query "<query>" --k 6`
+1. Retrieve context for the question (reuse the Section A query or refine it): use the `write` tool to save the query to `interview/.rq.txt`, then:
+   `exec`: `node skills/interview-drill/scripts/rag_query.mjs --vectors interview/vectors.json --query-file interview/.rq.txt --k 6`
 2. Using the `write` tool, save three files under `interview/`:
    - `.q.txt` — the exact question text you asked
    - `.a.txt` — Nick's transcript (verbatim)
@@ -59,7 +59,7 @@ To avoid shell-quoting problems with arbitrary speech text, write inputs to file
    - SEPARATE `message` with buttons:
      `[[{"text":"🔁 Try again","callback_data":"drill_retry"},{"text":"🎯 Go deeper","callback_data":"drill_deep"}],[{"text":"📌 Save vocab","callback_data":"drill_savevocab"},{"text":"✅ Done","callback_data":"drill_done"}]]`
 5. Log the session: with the `write` tool, save `interview/.session.json` containing
-   `{ "format", "question_text", "answer_transcript", "answer_mode": "voice"|"text", "score", "rephrases", "model_answer_text", "weak_vocab" }` (omit `id`/`ts` — the script fills them), then:
+   `{ "format", "question_text", "answer_transcript", "answer_mode": "voice"|"text", "score", "rephrases", "model_answer", "weak_vocab" }` (omit `id`/`ts` — the script fills them), then:
    `exec`: `node skills/interview-drill/scripts/log_session.mjs --in interview/.session.json --log interview/sessions.jsonl`
 6. Feed weak vocab into the existing vocab flow: per the `vocabulary-trainer` skill, append the `weak_vocab` items to `vocabulary_log.md` and the most relevant `word_lists/*.md` so they enter spaced repetition.
 

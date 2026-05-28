@@ -99,3 +99,24 @@ test('log_session.mjs appends one JSON line and fills id/ts when missing', () =>
   assert.equal(rec.score, 4);
   assert.ok(rec.id && rec.ts, 'id and ts auto-filled');
 });
+
+test('rag_index.mjs CLI guard fires; missing args -> usage error', () => {
+  let err;
+  try { execFileSync('node', ['rag_index.mjs'], { encoding: 'utf8' }); } catch (e) { err = e; }
+  assert.ok(err, 'should exit non-zero');
+  assert.match(String(err.stderr), /Usage: rag_index/);
+});
+
+test('rag_query.mjs CLI guard fires; missing args -> usage error', () => {
+  let err;
+  try { execFileSync('node', ['rag_query.mjs'], { encoding: 'utf8' }); } catch (e) { err = e; }
+  assert.ok(err, 'should exit non-zero');
+  assert.match(String(err.stderr), /Usage: rag_query/);
+});
+
+test('score_answer.mjs CLI guard fires; missing args -> usage error', () => {
+  let err;
+  try { execFileSync('node', ['score_answer.mjs'], { encoding: 'utf8' }); } catch (e) { err = e; }
+  assert.ok(err, 'should exit non-zero');
+  assert.match(String(err.stderr), /Usage: score_answer/);
+});
