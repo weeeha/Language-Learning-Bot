@@ -1,0 +1,13 @@
+{
+  "name": "interview-drill-scripts",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "scripts": {
+    "test": "node --test",
+    "smoke": "node smoke.mjs"
+  },
+  "dependencies": {
+    "openai": "^4.67.3"
+  }
+}
