@@ -81,3 +81,59 @@ export function topK(queryVec, vectors, k) {
     .sort((a, b) => b.score - a.score)
     .slice(0, k);
 }
+
+export const SCORE_SCHEMA = {
+  name: 'interview_answer_score',
+  strict: true,
+  schema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      score: { type: 'integer', minimum: 1, maximum: 5 },
+      rephrases: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: { original: { type: 'string' }, improved: { type: 'string' } },
+          required: ['original', 'improved']
+        }
+      },
+      model_answer: { type: 'string' },
+      weak_vocab: { type: 'array', items: { type: 'string' } }
+    },
+    required: ['score', 'rephrases', 'model_answer', 'weak_vocab']
+  }
+};
+
+export function buildScorePrompt({ question, transcript, context, deep = false }) {
+  const system = [
+    'You are a senior product-design interviewer evaluating a spoken interview answer in English.',
+    'The candidate is an advanced non-native English speaker (senior designer). Be precise and kind.',
+    deep
+      ? 'Provide a DEEP rubric: assess fluency, vocabulary range, structure, and content depth, plus the standard fields.'
+      : 'Return a 1-5 score, 2-3 rephrases of the weakest phrasings, a concise native-level model answer, and weak/missed vocabulary.',
+    'Rephrases must quote the candidate original phrasing and an improved version.',
+    'Ground the model answer in the provided candidate context when relevant.'
+  ].join(' ');
+  const user = [
+    `INTERVIEW QUESTION:\n${question}`,
+    `\nCANDIDATE CONTEXT (for grounding the model answer):\n${context || '(none)'}`,
+    `\nCANDIDATE SPOKEN ANSWER (transcribed):\n${transcript}`
+  ].join('\n');
+  return [{ role: 'system', content: system }, { role: 'user', content: user }];
+}
+
+// Lightweight runtime guard (defense-in-depth on top of strict json_schema).
+export function validateScore(obj) {
+  const errs = [];
+  if (!obj || typeof obj !== 'object') return ['not an object'];
+  if (!Number.isInteger(obj.score) || obj.score < 1 || obj.score > 5) errs.push('score must be int 1-5');
+  if (!Array.isArray(obj.rephrases)) errs.push('rephrases must be array');
+  else obj.rephrases.forEach((r, i) => {
+    if (typeof r?.original !== 'string' || typeof r?.improved !== 'string') errs.push(`rephrase ${i} malformed`);
+  });
+  if (typeof obj.model_answer !== 'string' || !obj.model_answer.trim()) errs.push('model_answer required');
+  if (!Array.isArray(obj.weak_vocab)) errs.push('weak_vocab must be array');
+  return errs;
+}

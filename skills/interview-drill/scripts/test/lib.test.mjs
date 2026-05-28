@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mulberry32, weightedPick, pickDrill } from '../lib.mjs';
 import { chunkMarkdown, contentHash } from '../lib.mjs';
 import { cosine, topK } from '../lib.mjs';
+import { buildScorePrompt, validateScore, SCORE_SCHEMA } from '../lib.mjs';
 
 test('mulberry32 is deterministic and in [0,1)', () => {
   assert.equal(mulberry32(1)(), mulberry32(1)());
@@ -67,4 +68,26 @@ test('topK ranks nearest first and strips embeddings', () => {
   assert.equal(hits[0].id, 'near');
   assert.equal(hits.length, 2);
   assert.ok('score' in hits[0]);
+});
+
+test('SCORE_SCHEMA is a strict json_schema with required fields', () => {
+  assert.equal(SCORE_SCHEMA.strict, true);
+  assert.deepEqual(SCORE_SCHEMA.schema.required.sort(), ['model_answer', 'rephrases', 'score', 'weak_vocab']);
+});
+
+test('buildScorePrompt embeds question/transcript/context; deep flag changes system', () => {
+  const m = buildScorePrompt({ question: 'QQ', transcript: 'TT', context: 'CC' });
+  assert.equal(m.length, 2);
+  assert.equal(m[0].role, 'system');
+  assert.match(m[1].content, /QQ/);
+  assert.match(m[1].content, /TT/);
+  assert.match(m[1].content, /CC/);
+  assert.match(buildScorePrompt({ question: 'q', transcript: 't', context: 'c', deep: true })[0].content, /DEEP/);
+});
+
+test('validateScore: accepts valid, rejects invalid', () => {
+  const good = { score: 4, rephrases: [{ original: 'a', improved: 'b' }], model_answer: 'x', weak_vocab: ['y'] };
+  assert.deepEqual(validateScore(good), []);
+  const bad = { score: 9, rephrases: 'no', model_answer: '', weak_vocab: 'no' };
+  assert.ok(validateScore(bad).length >= 3);
 });
