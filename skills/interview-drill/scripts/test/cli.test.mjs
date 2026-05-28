@@ -79,3 +79,23 @@ test('scoreAnswer throws on a malformed model response', async () => {
   const badChat = async () => ({ score: 99, rephrases: 'no', model_answer: '', weak_vocab: 'no' });
   await assert.rejects(() => scoreAnswer({ question: 'Q', transcript: 'A', context: 'C', chatFn: badChat }), /invalid score/);
 });
+
+import { execFileSync as ef4 } from 'node:child_process';
+import { mkdtempSync as mkd4, writeFileSync as wf4, readFileSync as rf4 } from 'node:fs';
+import { tmpdir as tmp4 } from 'node:os';
+import { join as j4 } from 'node:path';
+
+test('log_session.mjs appends one JSON line and fills id/ts when missing', () => {
+  const dir = mkd4(j4(tmp4(), 'log-'));
+  const session = j4(dir, 'session.json');
+  const log = j4(dir, 'sessions.jsonl');
+  wf4(session, JSON.stringify({ format: 'portfolio', question_text: 'Q', answer_transcript: 'A', score: 4, weak_vocab: ['x'] }));
+  wf4(log, '');
+  ef4('node', ['log_session.mjs', '--in', session, '--log', log], { encoding: 'utf8' });
+  const lines = rf4(log, 'utf8').trim().split('\n').filter(Boolean);
+  assert.equal(lines.length, 1);
+  const rec = JSON.parse(lines[0]);
+  assert.equal(rec.format, 'portfolio');
+  assert.equal(rec.score, 4);
+  assert.ok(rec.id && rec.ts, 'id and ts auto-filled');
+});
