@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mulberry32, weightedPick, pickDrill } from '../lib.mjs';
 import { chunkMarkdown, contentHash } from '../lib.mjs';
+import { cosine, topK } from '../lib.mjs';
 
 test('mulberry32 is deterministic and in [0,1)', () => {
   assert.equal(mulberry32(1)(), mulberry32(1)());
@@ -50,4 +51,20 @@ test('chunkMarkdown splits oversized sections on blank lines', () => {
 test('contentHash is stable and sensitive', () => {
   assert.equal(contentHash('x'), contentHash('x'));
   assert.notEqual(contentHash('x'), contentHash('y'));
+});
+
+test('cosine: identical > orthogonal', () => {
+  assert.ok(cosine([1, 0], [1, 0]) > cosine([1, 0], [0, 1]));
+  assert.equal(cosine([0, 0], [1, 1]), 0); // zero vector guard
+});
+
+test('topK ranks nearest first and strips embeddings', () => {
+  const vectors = [
+    { id: 'near', embedding: [1, 0, 0], text: 'n' },
+    { id: 'far', embedding: [0, 1, 0], text: 'f' }
+  ];
+  const hits = topK([0.9, 0.1, 0], vectors, 2);
+  assert.equal(hits[0].id, 'near');
+  assert.equal(hits.length, 2);
+  assert.ok('score' in hits[0]);
 });

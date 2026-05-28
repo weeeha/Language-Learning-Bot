@@ -67,3 +67,17 @@ export function chunkMarkdown(text, { maxChars = 1500 } = {}) {
   flush();
   return chunks;
 }
+
+export function cosine(a, b) {
+  let dot = 0, na = 0, nb = 0;
+  for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+  return na && nb ? dot / (Math.sqrt(na) * Math.sqrt(nb)) : 0;
+}
+
+// Rank vectors by cosine to queryVec, return top-k WITHOUT the embedding field.
+export function topK(queryVec, vectors, k) {
+  return vectors
+    .map(({ embedding, ...rest }) => ({ ...rest, score: cosine(queryVec, embedding) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, k);
+}
