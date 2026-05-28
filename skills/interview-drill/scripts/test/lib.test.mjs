@@ -4,6 +4,7 @@ import { mulberry32, weightedPick, pickDrill } from '../lib.mjs';
 import { chunkMarkdown, contentHash } from '../lib.mjs';
 import { cosine, topK } from '../lib.mjs';
 import { buildScorePrompt, validateScore, SCORE_SCHEMA } from '../lib.mjs';
+import { _requireKey } from '../openai.mjs';
 
 test('mulberry32 is deterministic and in [0,1)', () => {
   assert.equal(mulberry32(1)(), mulberry32(1)());
@@ -90,4 +91,14 @@ test('validateScore: accepts valid, rejects invalid', () => {
   assert.deepEqual(validateScore(good), []);
   const bad = { score: 9, rephrases: 'no', model_answer: '', weak_vocab: 'no' };
   assert.ok(validateScore(bad).length >= 3);
+});
+
+test('openai wrapper throws a clear error when OPENAI_API_KEY is missing', () => {
+  const saved = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  try {
+    assert.throws(() => _requireKey(), /OPENAI_API_KEY/);
+  } finally {
+    if (saved !== undefined) process.env.OPENAI_API_KEY = saved;
+  }
 });
