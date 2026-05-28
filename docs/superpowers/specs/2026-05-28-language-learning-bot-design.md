@@ -66,6 +66,9 @@ Instructions teaching Coach how to: pick today's format+focus, generate a person
 - `rag_index.mjs` — chunk `sources/` markdown, embed via OpenAI `text-embedding-3-small`, cache to `vectors.json` (re-embed only on content-hash change)
 - `rag_query.mjs` — embed a query, brute-force cosine over cached vectors, return top-K chunks (no vector DB — corpus is ~10 files)
 - `score_answer.mjs` — call OpenAI API directly with `response_format: json_schema` (strict) → `{score, rephrases[], model_answer, weak_vocab[]}`. **Reads the OpenAI key from env, never from logged config.**
+- `log_session.mjs` — append a structured session record (written by the agent via the `write` tool) as one line to `sessions.jsonl`
+
+Inputs that contain arbitrary text (the question, the STT transcript, the retrieved context) are passed to scripts as **files** the agent writes via the `write` tool, never as shell arguments — so speech text with quotes/newlines can't break quoting.
 
 **3. State: `workspace-speaker/interview/`**
 - `sources/` — git clone of `weeeha/nicks-bio` (single source of truth); `git pull` on a schedule or manual
