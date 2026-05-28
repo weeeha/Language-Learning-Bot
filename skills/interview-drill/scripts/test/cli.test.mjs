@@ -60,3 +60,22 @@ test('queryIndex returns top-K chunks ranked by similarity, no embeddings leaked
   assert.equal(hits[0].id, 'design#0');
   assert.ok(!('embedding' in hits[0]));
 });
+
+import { scoreAnswer } from '../score_answer.mjs';
+
+test('scoreAnswer validates and returns the structured score', async () => {
+  const fakeChat = async () => ({
+    score: 4,
+    rephrases: [{ original: 'I did design', improved: 'I led the end-to-end design' }],
+    model_answer: 'I led the NextHealth dashboard redesign...',
+    weak_vocab: ['stakeholder alignment']
+  });
+  const out = await scoreAnswer({ question: 'Q', transcript: 'A', context: 'C', chatFn: fakeChat });
+  assert.equal(out.score, 4);
+  assert.equal(out.weak_vocab[0], 'stakeholder alignment');
+});
+
+test('scoreAnswer throws on a malformed model response', async () => {
+  const badChat = async () => ({ score: 99, rephrases: 'no', model_answer: '', weak_vocab: 'no' });
+  await assert.rejects(() => scoreAnswer({ question: 'Q', transcript: 'A', context: 'C', chatFn: badChat }), /invalid score/);
+});
