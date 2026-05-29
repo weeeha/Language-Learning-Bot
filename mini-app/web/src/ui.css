@@ -1,0 +1,10 @@
+:root { --tg-bg-color:#fff; --tg-text-color:#000; --tg-hint-color:#888; --tg-button-color:#3390ec; --tg-button-text-color:#fff; --tg-secondary-bg-color:#f1f1f1; }
+* { box-sizing: border-box; } body { margin:0; font:15px/1.45 -apple-system,system-ui,sans-serif; background:var(--tg-bg-color); color:var(--tg-text-color); }
+.tabbar { position:fixed; bottom:0; left:0; right:0; display:flex; border-top:1px solid var(--tg-secondary-bg-color); background:var(--tg-bg-color); }
+.tabbar button { flex:1; padding:12px; border:0; background:none; color:var(--tg-hint-color); font-size:13px; }
+.tabbar button[aria-selected="true"] { color:var(--tg-button-color); font-weight:600; }
+.screen { padding:12px 12px 64px; } .row { padding:10px; border-bottom:1px solid var(--tg-secondary-bg-color); }
+.pill { font-size:11px; padding:2px 8px; border-radius:10px; background:var(--tg-secondary-bg-color); margin-right:6px; }
+button.primary { background:var(--tg-button-color); color:var(--tg-button-text-color); border:0; border-radius:8px; padding:10px 14px; }
+textarea { width:100%; min-height:40vh; font:13px/1.4 ui-monospace,monospace; }
+input,select { font:inherit; padding:6px; }
