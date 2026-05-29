@@ -9,7 +9,7 @@ async function req(path: string, init: RequestInit = {}) {
 export const api = {
   sessions: () => req('/sessions').then((r) => r.json() as Promise<Session[]>),
   settings: () => req('/settings').then((r) => r.json() as Promise<Settings>),
-  putSettings: (s: Settings) => req('/settings', { method: 'PUT', body: JSON.stringify(s) }).then((r) => r.json()),
+  putSettings: (s: Settings) => req('/settings', { method: 'PUT', body: JSON.stringify(s), headers: { 'Content-Type': 'application/json' } }).then((r) => r.json()),
   sources: () => req('/sources').then((r) => r.json() as Promise<string[]>),
   source: (n: string) => req(`/sources/${encodeURIComponent(n)}`).then((r) => r.text()),
   putSource: (n: string, body: string) => req(`/sources/${encodeURIComponent(n)}`, { method: 'PUT', body }).then((r) => r.json()),

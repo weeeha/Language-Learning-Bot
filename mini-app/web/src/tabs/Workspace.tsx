@@ -9,12 +9,25 @@ export default function Workspace() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [msg, setMsg] = useState('');
 
-  useEffect(() => { api.sources().then(setFiles).catch((e) => setMsg(String(e.message))); api.settings().then(setSettings); }, []);
-  const openFile = async (f: string) => { setSel(f); setBody(await api.source(f)); };
-  const save = async () => { await api.putSource(sel, body); setMsg('saved locally'); };
+  useEffect(() => {
+    api.sources().then(setFiles).catch((e) => setMsg(String(e.message)));
+    api.settings().then(setSettings).catch((e) => setMsg(String(e.message)));
+  }, []);
+  const openFile = async (f: string) => {
+    try { const text = await api.source(f); setSel(f); setBody(text); }
+    catch (e) { setMsg(String((e as Error).message)); }
+  };
+  const save = async () => {
+    try { await api.putSource(sel, body); setMsg('saved locally'); }
+    catch (e) { setMsg(String((e as Error).message)); }
+  };
   const push = async () => { setMsg('pushing…'); try { await api.push(sel); setMsg('pushed to GitHub'); } catch (e) { setMsg(String((e as Error).message)); } };
   const sync = async () => { setMsg('syncing…'); try { await api.sync(); setFiles(await api.sources()); setMsg('synced'); } catch (e) { setMsg(String((e as Error).message)); } };
-  const saveSettings = async () => { if (settings) { await api.putSettings(settings); setMsg('settings saved'); } };
+  const saveSettings = async () => {
+    if (!settings) return;
+    try { await api.putSettings(settings); setMsg('settings saved'); }
+    catch (e) { setMsg(String((e as Error).message)); }
+  };
 
   return (
     <>

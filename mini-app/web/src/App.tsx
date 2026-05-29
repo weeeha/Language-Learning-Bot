@@ -7,9 +7,9 @@ export default function App() {
   return (
     <>
       <div className="screen">{tab === 'sessions' ? <Sessions /> : <Workspace />}</div>
-      <nav className="tabbar">
-        <button aria-selected={tab === 'sessions'} onClick={() => setTab('sessions')}>Sessions</button>
-        <button aria-selected={tab === 'workspace'} onClick={() => setTab('workspace')}>Workspace</button>
+      <nav className="tabbar" role="tablist">
+        <button role="tab" aria-selected={tab === 'sessions'} onClick={() => setTab('sessions')}>Sessions</button>
+        <button role="tab" aria-selected={tab === 'workspace'} onClick={() => setTab('workspace')}>Workspace</button>
       </nav>
     </>
   );
