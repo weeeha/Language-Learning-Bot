@@ -15,7 +15,7 @@ export function createApp({ interviewDir, botToken, staticDir }) {
   // Auth middleware for /api/* — expects "Authorization: tma <initDataRaw>".
   app.use('/api/*', async (c, next) => {
     const h = c.req.header('Authorization') || '';
-    const raw = h.startsWith('tma ') ? h.slice(4) : '';
+    const raw = h.startsWith('tma ') ? h.slice(4) : ''; // Telegram always sends the lowercase "tma" scheme
     try { c.set('tg', verifyInitData(raw, botToken)); }
     catch (e) { return c.json({ error: String(e.message) }, 401); }
     await next();
@@ -29,6 +29,8 @@ export function createApp({ interviewDir, botToken, staticDir }) {
   app.put('/api/sources/:name', async (c) => { store.writeSource(c.req.param('name'), await c.req.text()); return c.json({ ok: true }); });
   app.post('/api/sync', (c) => c.json({ ok: true, out: store.syncSources() }));
   app.post('/api/sources/:name/push', (c) => c.json({ ok: true, out: store.pushSource(c.req.param('name')) }));
+
+  app.onError((err, c) => c.json({ error: err.message }, err.status || 500));
 
   // Static SPA (and index.html fallback for client routing) — only if a build dir is given.
   if (staticDir && existsSync(staticDir)) {

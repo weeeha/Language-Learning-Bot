@@ -22,7 +22,8 @@ export function verifyInitData(initDataRaw, botToken, maxAgeSec = 86400) {
   if (a.length !== b.length || !timingSafeEqual(a, b)) throw new Error('invalid hash');
 
   const authDate = Number(params.get('auth_date') || 0);
-  if (!authDate || (Date.now() / 1000 - authDate) > maxAgeSec) throw new Error('initData expired');
+  const age = Date.now() / 1000 - authDate;
+  if (!authDate || age < -60 || age > maxAgeSec) throw new Error('initData expired'); // reject stale AND future (60s skew grace)
 
   const userRaw = params.get('user');
   return { user: userRaw ? JSON.parse(userRaw) : null, authDate };

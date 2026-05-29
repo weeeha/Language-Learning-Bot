@@ -47,3 +47,16 @@ test('rejects stale auth_date', () => {
 test('rejects missing hash', () => {
   assert.throws(() => verifyInitData('auth_date=1&user=%7B%7D', BOT, 86400), /missing hash/i);
 });
+
+test('rejects a same-length but wrong hash (exercises timingSafeEqual path)', () => {
+  const now = Math.floor(Date.now() / 1000);
+  const raw = signInitData({ auth_date: String(now), user: JSON.stringify({ id: 42 }) })
+    .replace(/hash=[0-9a-f]+/, 'hash=' + 'a'.repeat(64));
+  assert.throws(() => verifyInitData(raw, BOT, 86400), /invalid hash/i);
+});
+
+test('rejects a future auth_date beyond the skew grace', () => {
+  const future = Math.floor(Date.now() / 1000) + 100000;
+  const raw = signInitData({ auth_date: String(future), user: JSON.stringify({ id: 42 }) });
+  assert.throws(() => verifyInitData(raw, BOT, 86400), /expired/i);
+});

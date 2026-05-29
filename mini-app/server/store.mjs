@@ -7,7 +7,8 @@ export function makeStore(interviewDir) {
 
   // Guard: only a bare *.md filename inside sources/ (no path separators).
   const safe = (name) => {
-    if (!name || name !== basename(name) || !name.endsWith('.md')) throw new Error(`invalid source: ${name}`);
+    if (!name || name.includes('\0') || name !== basename(name) || !name.endsWith('.md'))
+      throw Object.assign(new Error(`invalid source: ${name}`), { status: 400 });
     return join(sourcesDir, name);
   };
 
@@ -33,6 +34,8 @@ export function makeStore(interviewDir) {
     pushSource(name) {
       safe(name);
       execFileSync('git', ['-C', sourcesDir, 'add', name], { encoding: 'utf8' });
+      const status = execFileSync('git', ['-C', sourcesDir, 'status', '--porcelain', name], { encoding: 'utf8' });
+      if (!status.trim()) throw Object.assign(new Error('nothing to commit'), { status: 409 });
       execFileSync('git', ['-C', sourcesDir, 'commit', '-m', `edit ${name} via Mini App`], { encoding: 'utf8' });
       return execFileSync('git', ['-C', sourcesDir, 'push'], { encoding: 'utf8' });
     }
