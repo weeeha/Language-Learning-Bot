@@ -1,0 +1,8 @@
+{
+  "name": "interview-mini-app-server",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "scripts": { "test": "node --test", "start": "node server.mjs" },
+  "dependencies": { "hono": "^4.6.3", "@hono/node-server": "^1.13.1" }
+}
