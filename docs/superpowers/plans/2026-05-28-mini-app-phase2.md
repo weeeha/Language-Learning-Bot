@@ -6,7 +6,7 @@
 
 **Architecture:** One self-hosted Node server (Hono) serves BOTH the built React SPA and a JSON API, reading/writing the same `workspace-speaker/interview/` state the Phase 1 skill uses. The server runs **off** the OpenClaw gateway (so it never affects the agent fleet's auth) and is exposed over HTTPS via a tunnel. Auth is Telegram `initData` HMAC-SHA256, verified server-side with the Coach bot token.
 
-**Tech Stack:** Server — Node ESM + Hono + `@hono/node-server`, `node:test`. Frontend — React + Vite + TypeScript + `@telegram-apps/sdk`. Tunnel — Tailscale Funnel (default) or cloudflared.
+**Tech Stack:** Server — Node ESM + Hono + `@hono/node-server`, `node:test`. Frontend — React + Vite + TypeScript, using the official `telegram-web-app.js` global (no SDK dependency). Tunnel — Tailscale Funnel (default) or cloudflared.
 
 ---
 
@@ -135,8 +135,8 @@ test('rejects a tampered hash', () => {
 
 test('rejects a tampered field (hash no longer matches)', () => {
   const now = Math.floor(Date.now() / 1000);
-  const raw = signInitData({ auth_date: String(now), user: JSON.stringify({ id: 42 }) })
-    .replace('first_name', 'x'); // mutate payload, keep old hash
+  const raw = signInitData({ auth_date: String(now), user: JSON.stringify({ id: 42, first_name: 'Nick' }) })
+    .replace('Nick', 'Evil'); // mutate a signed field after signing, keep old hash
   assert.throws(() => verifyInitData(raw, BOT, 86400), /invalid hash/i);
 });
 
@@ -441,10 +441,12 @@ cd "$REPO" && git add mini-app/server/server.mjs mini-app/server/test/server.tes
   "private": true,
   "type": "module",
   "scripts": { "dev": "vite", "build": "vite build", "preview": "vite preview" },
-  "dependencies": { "react": "^18.3.1", "react-dom": "^18.3.1", "@telegram-apps/sdk": "^2.5.0" },
+  "dependencies": { "react": "^18.3.1", "react-dom": "^18.3.1" },
   "devDependencies": { "vite": "^5.4.8", "@vitejs/plugin-react": "^4.3.1", "typescript": "^5.6.2", "@types/react": "^18.3.10", "@types/react-dom": "^18.3.0" }
 }
 ```
+
+> The app uses the official `telegram-web-app.js` global (loaded in `index.html`) via `src/telegram.ts` — no `@telegram-apps/sdk` import is needed, so it isn't a dependency. (If you later want the SDK's typed helpers, add it then.)
 
 - [ ] **Step 2: `.gitignore`** → `node_modules/` and `dist/`
 
@@ -772,6 +774,7 @@ STATIC_DIR="$REPO/mini-app/web/dist" PORT=8443 node server.mjs
 - Auth: same `initData` HMAC algorithm proven in `auth.test.mjs`; server gates every `/api/*`.
 - No secrets in repo; server reads `COACH_BOT_TOKEN` + `INTERVIEW_DIR` from env.
 - Reuses Phase 1 state (`sessions.jsonl`, `settings.json`, `sources/`) — no schema change.
+- **Note (post-execution):** the committed implementation added review-driven hardening beyond the literal code here — initData future-timestamp rejection, `pushSource` 409 on nothing-to-commit, a Hono `onError` JSON error mapper, a null-byte source guard, Workspace API-error surfacing, and two extra auth tests (13 total). The committed code is the source of truth.
 
 ## Phase 2 Done — Definition of Done
 - `cd mini-app/server && node --test` green (11 tests); local smoke shows `200` (SPA) + `401` (unauthed API).
