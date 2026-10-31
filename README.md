@@ -1,5 +1,13 @@
 # Language-Learning-Bot
 
+**Problem.** A non-native speaker preparing for design interviews needs daily speaking reps across the formats interviews use (portfolio walkthrough, behavioral, critique, whiteboard, hiring-manager screen), and a one-off cram does not provide them.
+
+**Idea.** A daily drill: pick an interview format, ask a question grounded in retrieved notes about the speaker's own work, score the answer with rephrases and a model answer, and log the session.
+
+**Built.** An OpenClaw skill (`interview-drill`) with Node scripts for the drill, retrieval, scoring and logging, plus a Telegram Mini App (Hono API, React and Vite) for reviewing sessions and editing the source notes. 40 commits on 6 days, May 28 to Oct 25, 2026.
+
+**Decision.** Extend the existing OpenClaw Coach agent with a new skill instead of building a separate agent. Coach already runs daily vocabulary, pitch coaching, a cron habit and a Telegram bot, and a second agent would duplicate that and split daily practice across two bots.
+
 A language-/interview-practice assistant: a Telegram-driven English design-interview coach. It pairs a runnable skill that delivers a daily interview drill (pick a format, ask a question grounded in retrieved context, score the spoken/typed answer, log the session) with a Telegram Mini App for reviewing past sessions and editing the source documents the drill draws from.
 
 > Note: the GitHub description frames this as a "language-learning chatbot." In the committed code the implemented feature is an **English design-interview drill** (skill `interview-drill`, package names `interview-mini-app-*`, `COACH_BOT_TOKEN`). The two phases below are what actually exists in the repo.
