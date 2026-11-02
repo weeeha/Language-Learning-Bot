@@ -8,6 +8,8 @@
 
 **Decision.** Extend the existing OpenClaw Coach agent with a new skill instead of building a separate agent. Coach already runs daily vocabulary, pitch coaching, a cron habit and a Telegram bot, and a second agent would duplicate that and split daily practice across two bots.
 
+![Telegram Mini App Sessions tab: a list of past interview drills by format and score, with the newest expanded to show the answer, rephrases, model answer and vocabulary.](docs/screenshots/mini-app-sessions.png)
+
 A language-/interview-practice assistant: a Telegram-driven English design-interview coach. It pairs a runnable skill that delivers a daily interview drill (pick a format, ask a question grounded in retrieved context, score the spoken/typed answer, log the session) with a Telegram Mini App for reviewing past sessions and editing the source documents the drill draws from.
 
 > Note: the GitHub description frames this as a "language-learning chatbot." In the committed code the implemented feature is an **English design-interview drill** (skill `interview-drill`, package names `interview-mini-app-*`, `COACH_BOT_TOKEN`). The two phases below are what actually exists in the repo.
